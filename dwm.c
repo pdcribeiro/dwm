@@ -458,11 +458,12 @@ buttonpress(XEvent *e)
 void
 checkotherwm(void)
 {
-	xerrorxlib = XSetErrorHandler(xerrorstart);
+	xerrorxlib = XSetErrorHandler(xerrorstart); // set new error handler and save previous one
 	/* this causes an error if some other window manager is running */
+	// intercept calls to change root window child windows
 	XSelectInput(dpy, DefaultRootWindow(dpy), SubstructureRedirectMask);
-	XSync(dpy, False);
-	XSetErrorHandler(xerror);
+	XSync(dpy, False); // flush output buffer; errors are handled by xerrorstart
+	XSetErrorHandler(xerror); // set default error handler
 	XSync(dpy, False);
 }
 
@@ -1628,6 +1629,7 @@ showhide(Client *c)
 	}
 }
 
+// Waits for zombie processes to terminate
 void
 sigchld(int unused)
 {
