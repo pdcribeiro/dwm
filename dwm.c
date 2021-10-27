@@ -170,6 +170,7 @@ static void focusin(XEvent *e);
 static void focusmon(const Arg *arg);
 static void focusstack(const Arg *arg);
 static Atom getatomprop(Client *c, Atom prop);
+static unsigned int getclients(Client ***clients);
 static int getrootptr(int *x, int *y);
 static long getstate(Window w);
 static int gettextprop(Window w, Atom atom, char *text, unsigned int size);
@@ -189,6 +190,8 @@ static void pop(Client *c);
 static void propertynotify(XEvent *e);
 static void quit(const Arg *arg);
 static Monitor *recttomon(int x, int y, int w, int h);
+static void resetclient(Client *c);
+static void resetclients(const Arg *arg);
 static void resize(Client *c, int x, int y, int w, int h, int interact);
 static void resizeclient(Client *c, int x, int y, int w, int h);
 static void resizemouse(const Arg *arg);
@@ -878,6 +881,23 @@ getatomprop(Client *c, Atom prop)
 	return atom;
 }
 
+unsigned int
+getclients(Client ***clients)
+{
+	unsigned int n = 0, i = 0;
+	Client *c;
+	Monitor *m;
+
+	for (m = mons; m; m = m->next)
+		for (c = m->clients; c; c = c->next)
+			n++;
+	*clients = ecalloc(n, sizeof(Client *));
+	for (m = mons; m; m = m->next)
+		for (c = m->clients; c; c = c->next)
+			(*clients)[i++] = c;
+	return n;
+}
+
 int
 getrootptr(int *x, int *y)
 {
@@ -1264,6 +1284,58 @@ recttomon(int x, int y, int w, int h)
 			r = m;
 		}
 	return r;
+}
+
+void
+resetclient(Client *c) {
+	const char *class, *instance;
+	unsigned int i;
+	const Rule *r;
+	Monitor *m;
+	XClassHint ch = { NULL, NULL };
+
+	XGetClassHint(dpy, c->win, &ch);
+	class    = ch.res_class ? ch.res_class : broken;
+	instance = ch.res_name  ? ch.res_name  : broken;
+
+	for (i = 0; i < LENGTH(rules); i++) {
+		r = &rules[i];
+		if ((!r->title || strstr(c->name, r->title))
+		&& (!r->class || strstr(class, r->class))
+		&& (!r->instance || strstr(instance, r->instance)))
+		{
+			if (r->tags & TAGMASK)
+				c->tags = r->tags & TAGMASK;
+			for (m = mons; m && m->num != r->monitor; m = m->next);
+			if (m && m != c->mon) {
+				if (c == selmon->sel)
+					unfocus(c, 1);
+				detach(c);
+				detachstack(c);
+				c->mon = m;
+				attach(c);
+				attachstack(c);
+			}
+		}
+	}
+	if (ch.res_class)
+		XFree(ch.res_class);
+	if (ch.res_name)
+		XFree(ch.res_name);
+}
+
+void
+resetclients(const Arg *arg)
+{
+	unsigned int n, i;
+	Client **clients = NULL;
+
+	n = getclients(&clients);
+	for (i = 0; i < n; i++)
+		resetclient(clients[i]);
+	free(clients);
+	focus(NULL);
+	arrange(NULL);
 }
 
 void
